@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/dotnet-rate-limiter/dotnet-rate-limiter.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/dotnet-rate-limiter.Tests/dotnet-rate-limiter.Tests.csproj" />
+  </Folder>
+</Solution>

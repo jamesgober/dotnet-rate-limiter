@@ -1,0 +1,14 @@
+C:\Dev\libs\dotnet\dotnet-rate-limiter\src\dotnet-rate-limiter\bin\Release\net8.0\JG.RateLimiter.deps.json
+C:\Dev\libs\dotnet\dotnet-rate-limiter\src\dotnet-rate-limiter\bin\Release\net8.0\JG.RateLimiter.dll
+C:\Dev\libs\dotnet\dotnet-rate-limiter\src\dotnet-rate-limiter\bin\Release\net8.0\JG.RateLimiter.pdb
+C:\Dev\libs\dotnet\dotnet-rate-limiter\src\dotnet-rate-limiter\bin\Release\net8.0\JG.RateLimiter.xml
+C:\Dev\libs\dotnet\dotnet-rate-limiter\src\dotnet-rate-limiter\obj\Release\net8.0\dotnet-rate-limiter.GeneratedMSBuildEditorConfig.editorconfig
+C:\Dev\libs\dotnet\dotnet-rate-limiter\src\dotnet-rate-limiter\obj\Release\net8.0\dotnet-rate-limiter.AssemblyInfoInputs.cache
+C:\Dev\libs\dotnet\dotnet-rate-limiter\src\dotnet-rate-limiter\obj\Release\net8.0\dotnet-rate-limiter.AssemblyInfo.cs
+C:\Dev\libs\dotnet\dotnet-rate-limiter\src\dotnet-rate-limiter\obj\Release\net8.0\dotnet-rate-limiter.csproj.CoreCompileInputs.cache
+C:\Dev\libs\dotnet\dotnet-rate-limiter\src\dotnet-rate-limiter\obj\Release\net8.0\dotnet-rate-limiter.sourcelink.json
+C:\Dev\libs\dotnet\dotnet-rate-limiter\src\dotnet-rate-limiter\obj\Release\net8.0\JG.RateLimiter.dll
+C:\Dev\libs\dotnet\dotnet-rate-limiter\src\dotnet-rate-limiter\obj\Release\net8.0\refint\JG.RateLimiter.dll
+C:\Dev\libs\dotnet\dotnet-rate-limiter\src\dotnet-rate-limiter\obj\Release\net8.0\JG.RateLimiter.xml
+C:\Dev\libs\dotnet\dotnet-rate-limiter\src\dotnet-rate-limiter\obj\Release\net8.0\JG.RateLimiter.pdb
+C:\Dev\libs\dotnet\dotnet-rate-limiter\src\dotnet-rate-limiter\obj\Release\net8.0\ref\JG.RateLimiter.dll

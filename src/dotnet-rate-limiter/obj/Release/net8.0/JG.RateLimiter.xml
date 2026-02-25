@@ -1,0 +1,654 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>JG.RateLimiter</name>
+    </assembly>
+    <members>
+        <member name="T:JG.RateLimiter.IRateLimiter">
+            <summary>
+            Defines the contract for a rate limiter that controls the rate of operations.
+            </summary>
+            <remarks>
+            Implementations must be thread-safe. A single <see cref="T:JG.RateLimiter.IRateLimiter"/> instance
+            may be accessed concurrently from multiple threads.
+            </remarks>
+        </member>
+        <member name="M:JG.RateLimiter.IRateLimiter.AttemptAcquire(System.Int32)">
+            <summary>
+            Attempts to acquire the specified number of permits synchronously without waiting.
+            </summary>
+            <param name="permitCount">The number of permits to acquire. Must be at least 1.</param>
+            <returns>A <see cref="T:JG.RateLimiter.RateLimitLease"/> indicating whether the permits were granted.</returns>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when <paramref name="permitCount"/> is less than 1.</exception>
+            <exception cref="T:System.ObjectDisposedException">Thrown when the limiter has been disposed.</exception>
+        </member>
+        <member name="M:JG.RateLimiter.IRateLimiter.AcquireAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            Asynchronously acquires the specified number of permits, potentially waiting if necessary.
+            </summary>
+            <param name="permitCount">The number of permits to acquire. Must be at least 1.</param>
+            <param name="cancellationToken">A token to cancel the wait.</param>
+            <returns>A <see cref="T:JG.RateLimiter.RateLimitLease"/> indicating whether the permits were granted.</returns>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when <paramref name="permitCount"/> is less than 1.</exception>
+            <exception cref="T:System.ObjectDisposedException">Thrown when the limiter has been disposed.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when <paramref name="cancellationToken"/> is cancelled.</exception>
+        </member>
+        <member name="M:JG.RateLimiter.IRateLimiter.GetStatistics">
+            <summary>
+            Returns a snapshot of the current rate limiter statistics.
+            </summary>
+            <returns>Current counters for this rate limiter instance.</returns>
+        </member>
+        <member name="T:JG.RateLimiter.IRateLimiterPolicy">
+            <summary>
+            Defines a rate limiting policy that resolves partition keys and creates
+            <see cref="T:JG.RateLimiter.IRateLimiter"/> instances for each partition.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.IRateLimiterPolicy.PartitionBy">
+            <summary>
+            A delegate that extracts a partition key from the incoming HTTP request.
+            Requests with the same partition key share a rate limiter instance.
+            </summary>
+            <remarks>
+            If the delegate returns <c>null</c>, the request is assigned to a global partition.
+            </remarks>
+        </member>
+        <member name="M:JG.RateLimiter.IRateLimiterPolicy.CreateLimiter(System.TimeProvider)">
+            <summary>
+            Creates a new <see cref="T:JG.RateLimiter.IRateLimiter"/> instance for a partition.
+            Called once per unique partition key; the result is cached by the store.
+            </summary>
+            <param name="timeProvider">The time provider used by time-based algorithms.</param>
+            <returns>A new rate limiter configured according to this policy.</returns>
+        </member>
+        <member name="T:JG.RateLimiter.IRateLimitStore">
+            <summary>
+            Manages <see cref="T:JG.RateLimiter.IRateLimiter"/> instances keyed by policy name and partition key.
+            </summary>
+            <remarks>
+            Implementations must be thread-safe for concurrent access from multiple requests.
+            </remarks>
+        </member>
+        <member name="M:JG.RateLimiter.IRateLimitStore.GetOrCreate(System.String,System.String,System.Func{JG.RateLimiter.IRateLimiter})">
+            <summary>
+            Returns an existing rate limiter for the given key, or creates one using the factory.
+            </summary>
+            <param name="policyName">The name of the rate limiting policy.</param>
+            <param name="partitionKey">The partition key (e.g., client IP, API key).</param>
+            <param name="factory">A factory delegate invoked when no limiter exists for this key.</param>
+            <returns>The rate limiter associated with the composite key.</returns>
+        </member>
+        <member name="M:JG.RateLimiter.IRateLimitStore.TryRemove(System.String,System.String)">
+            <summary>
+            Removes and disposes the rate limiter for the given key if it exists.
+            </summary>
+            <param name="policyName">The policy name.</param>
+            <param name="partitionKey">The partition key.</param>
+            <returns><c>true</c> if a limiter was found and removed; otherwise <c>false</c>.</returns>
+        </member>
+        <member name="M:JG.RateLimiter.IRateLimitStore.Clear">
+            <summary>
+            Removes and disposes all stored rate limiter instances.
+            </summary>
+        </member>
+        <member name="T:JG.RateLimiter.RateLimitLease">
+            <summary>
+            Represents the result of attempting to acquire permits from a rate limiter.
+            </summary>
+            <remarks>
+            Leases that carry a release callback (e.g., from a <see cref="T:JG.RateLimiter.Algorithms.ConcurrencyLimiter"/>)
+            must be disposed to return the permits. Always use a <c>using</c> statement or block.
+            </remarks>
+        </member>
+        <member name="P:JG.RateLimiter.RateLimitLease.IsAcquired">
+            <summary>
+            Gets a value indicating whether the requested permits were successfully acquired.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.RateLimitLease.Limit">
+            <summary>
+            Gets the maximum number of permits allowed by the policy (the configured limit).
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.RateLimitLease.Remaining">
+            <summary>
+            Gets the number of permits still available after this acquisition.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.RateLimitLease.RetryAfter">
+            <summary>
+            Gets the suggested time to wait before retrying, or <c>null</c> if not applicable.
+            Populated when <see cref="P:JG.RateLimiter.RateLimitLease.IsAcquired"/> is <c>false</c>.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.RateLimitLease.ResetAfter">
+            <summary>
+            Gets the time until the current rate limit window resets, or <c>null</c> if not applicable.
+            </summary>
+        </member>
+        <member name="M:JG.RateLimiter.RateLimitLease.Acquired(System.Int64,System.Int64,System.Nullable{System.TimeSpan},System.Action)">
+            <summary>
+            Creates a lease representing a successful acquisition.
+            </summary>
+        </member>
+        <member name="M:JG.RateLimiter.RateLimitLease.Rejected(System.Int64,System.Nullable{System.TimeSpan})">
+            <summary>
+            Creates a lease representing a rejected acquisition.
+            </summary>
+        </member>
+        <member name="M:JG.RateLimiter.RateLimitLease.Dispose">
+            <summary>
+            Releases any held permits back to the rate limiter. Safe to call multiple times.
+            </summary>
+        </member>
+        <member name="T:JG.RateLimiter.RateLimitStatistics">
+            <summary>
+            A snapshot of counters for a rate limiter instance.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.RateLimitStatistics.CurrentAvailablePermits">
+            <summary>
+            Gets the number of permits currently available for acquisition.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.RateLimitStatistics.TotalSuccessfulLeases">
+            <summary>
+            Gets the total number of successful lease acquisitions since creation.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.RateLimitStatistics.TotalFailedLeases">
+            <summary>
+            Gets the total number of failed (rejected) lease acquisitions since creation.
+            </summary>
+        </member>
+        <member name="T:JG.RateLimiter.Algorithms.ConcurrencyLimiter">
+            <summary>
+            A rate limiter that caps the number of concurrent in-flight operations.
+            Permits are returned when the <see cref="T:JG.RateLimiter.RateLimitLease"/> is disposed.
+            </summary>
+            <remarks>
+            <para>
+            Unlike time-window algorithms, this limiter does not track request rates.
+            Instead, it ensures that no more than <c>PermitLimit</c> operations execute
+            simultaneously. Callers <b>must</b> dispose the returned lease to release permits.
+            </para>
+            <para>Thread-safe. All public members may be called concurrently.</para>
+            </remarks>
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.ConcurrencyLimiter.#ctor(System.Int32)">
+            <summary>
+            Creates a new concurrency limiter.
+            </summary>
+            <param name="permitLimit">Maximum number of concurrent permits. Must be at least 1.</param>
+            <exception cref="T:System.ArgumentOutOfRangeException">
+            Thrown when <paramref name="permitLimit"/> is less than 1.
+            </exception>
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.ConcurrencyLimiter.AttemptAcquire(System.Int32)">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.ConcurrencyLimiter.AcquireAsync(System.Int32,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.ConcurrencyLimiter.GetStatistics">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.ConcurrencyLimiter.Dispose">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.ConcurrencyLimiter.DisposeAsync">
+            <inheritdoc />
+        </member>
+        <member name="T:JG.RateLimiter.Algorithms.FixedWindowRateLimiter">
+            <summary>
+            A rate limiter that counts requests in fixed, non-overlapping time windows.
+            When a window expires the counter resets to zero.
+            </summary>
+            <remarks>
+            <para>
+            Simple and predictable, but can allow up to 2× the configured limit at window boundaries
+            when requests cluster at the end of one window and the start of the next.
+            Use <see cref="T:JG.RateLimiter.Algorithms.SlidingWindowRateLimiter"/> if you need smoother enforcement.
+            </para>
+            <para>Thread-safe. All public members may be called concurrently.</para>
+            </remarks>
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.FixedWindowRateLimiter.#ctor(System.Int32,System.TimeSpan,System.TimeProvider)">
+            <summary>
+            Creates a new fixed window rate limiter.
+            </summary>
+            <param name="permitLimit">Maximum number of permits allowed per window.</param>
+            <param name="window">Duration of each fixed time window.</param>
+            <param name="timeProvider">
+            Optional time provider for testing. Defaults to <see cref="P:System.TimeProvider.System"/>.
+            </param>
+            <exception cref="T:System.ArgumentOutOfRangeException">
+            Thrown when <paramref name="permitLimit"/> is less than 1 or
+            <paramref name="window"/> is not a positive duration.
+            </exception>
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.FixedWindowRateLimiter.AttemptAcquire(System.Int32)">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.FixedWindowRateLimiter.AcquireAsync(System.Int32,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.FixedWindowRateLimiter.GetStatistics">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.FixedWindowRateLimiter.Dispose">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.FixedWindowRateLimiter.DisposeAsync">
+            <inheritdoc />
+        </member>
+        <member name="T:JG.RateLimiter.Algorithms.SlidingWindowRateLimiter">
+            <summary>
+            A rate limiter that counts requests over a rolling time window divided into segments.
+            Older segments are discarded as time advances, providing smoother enforcement than
+            <see cref="T:JG.RateLimiter.Algorithms.FixedWindowRateLimiter"/>.
+            </summary>
+            <remarks>
+            <para>
+            The window is split into <c>SegmentsPerWindow</c> equal sub-intervals.
+            The total request count across all active segments determines whether new
+            requests are allowed. As time progresses, expired segments are zeroed out.
+            </para>
+            <para>Thread-safe. All public members may be called concurrently.</para>
+            </remarks>
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.SlidingWindowRateLimiter.#ctor(System.Int32,System.TimeSpan,System.Int32,System.TimeProvider)">
+            <summary>
+            Creates a new sliding window rate limiter.
+            </summary>
+            <param name="permitLimit">Maximum number of permits allowed within the rolling window.</param>
+            <param name="window">Total duration of the sliding window.</param>
+            <param name="segmentsPerWindow">
+            Number of sub-segments the window is divided into. Higher values give finer granularity
+            at the cost of slightly more bookkeeping. Must be at least 2.
+            </param>
+            <param name="timeProvider">
+            Optional time provider for testing. Defaults to <see cref="P:System.TimeProvider.System"/>.
+            </param>
+            <exception cref="T:System.ArgumentOutOfRangeException">
+            Thrown when <paramref name="permitLimit"/> is less than 1,
+            <paramref name="segmentsPerWindow"/> is less than 2,
+            or <paramref name="window"/> is not a positive duration.
+            </exception>
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.SlidingWindowRateLimiter.AttemptAcquire(System.Int32)">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.SlidingWindowRateLimiter.AcquireAsync(System.Int32,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.SlidingWindowRateLimiter.GetStatistics">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.SlidingWindowRateLimiter.Dispose">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.SlidingWindowRateLimiter.DisposeAsync">
+            <inheritdoc />
+        </member>
+        <member name="T:JG.RateLimiter.Algorithms.TokenBucketRateLimiter">
+            <summary>
+            A rate limiter that uses the token bucket algorithm, allowing controlled bursts
+            while enforcing a sustained request rate.
+            </summary>
+            <remarks>
+            <para>
+            Tokens are replenished continuously based on elapsed time. When a request arrives,
+            the bucket is refilled proportionally to the time since the last access, then tokens
+            are consumed. If insufficient tokens are available the request is rejected.
+            </para>
+            <para>Thread-safe. All public members may be called concurrently.</para>
+            </remarks>
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.TokenBucketRateLimiter.#ctor(System.Int32,System.TimeSpan,System.Int32,System.TimeProvider)">
+            <summary>
+            Creates a new token bucket rate limiter.
+            </summary>
+            <param name="permitLimit">The number of permits replenished per <paramref name="window"/>.</param>
+            <param name="window">The time period over which <paramref name="permitLimit"/> tokens are added.</param>
+            <param name="burstLimit">The maximum number of tokens the bucket can hold (burst capacity).</param>
+            <param name="timeProvider">
+            Optional time provider for testing. Defaults to <see cref="P:System.TimeProvider.System"/>.
+            </param>
+            <exception cref="T:System.ArgumentOutOfRangeException">
+            Thrown when <paramref name="permitLimit"/> or <paramref name="burstLimit"/> is less than 1,
+            or <paramref name="window"/> is not a positive duration.
+            </exception>
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.TokenBucketRateLimiter.AttemptAcquire(System.Int32)">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.TokenBucketRateLimiter.AcquireAsync(System.Int32,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.TokenBucketRateLimiter.GetStatistics">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.TokenBucketRateLimiter.Dispose">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Algorithms.TokenBucketRateLimiter.DisposeAsync">
+            <inheritdoc />
+        </member>
+        <member name="T:JG.RateLimiter.RateLimitingApplicationBuilderExtensions">
+            <summary>
+            Extension methods for adding rate limiting middleware to the ASP.NET Core pipeline.
+            </summary>
+        </member>
+        <member name="M:JG.RateLimiter.RateLimitingApplicationBuilderExtensions.UseRateLimiting(Microsoft.AspNetCore.Builder.IApplicationBuilder)">
+            <summary>
+            Adds rate limiting middleware to the request pipeline. Must be called after
+            <c>UseRouting</c> so endpoint metadata (e.g., <see cref="T:JG.RateLimiter.Middleware.RateLimitAttribute"/>)
+            is available.
+            </summary>
+            <param name="app">The application builder.</param>
+            <returns>The <see cref="T:Microsoft.AspNetCore.Builder.IApplicationBuilder"/> for chaining.</returns>
+        </member>
+        <member name="T:JG.RateLimiter.RateLimitingServiceCollectionExtensions">
+            <summary>
+            Extension methods for registering rate limiting services with dependency injection.
+            </summary>
+        </member>
+        <member name="M:JG.RateLimiter.RateLimitingServiceCollectionExtensions.AddRateLimiting(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{JG.RateLimiter.RateLimitingOptions})">
+            <summary>
+            Adds rate limiting services to the service collection.
+            </summary>
+            <param name="services">The service collection.</param>
+            <param name="configure">A delegate to configure <see cref="T:JG.RateLimiter.RateLimitingOptions"/>.</param>
+            <returns>The <see cref="T:Microsoft.Extensions.DependencyInjection.IServiceCollection"/> for chaining.</returns>
+            <example>
+            <code>
+            builder.Services.AddRateLimiting(options =>
+            {
+                options.AddPolicy("api", new TokenBucketPolicy
+                {
+                    PermitLimit = 100,
+                    Window = TimeSpan.FromMinutes(1),
+                    BurstLimit = 20
+                });
+            });
+            </code>
+            </example>
+        </member>
+        <member name="T:JG.RateLimiter.Internal.RateLimitHeaders">
+            <summary>
+            Standard header names for rate limiting responses.
+            </summary>
+        </member>
+        <member name="T:JG.RateLimiter.Middleware.DisableRateLimitingAttribute">
+            <summary>
+            Disables rate limiting for a controller or action, overriding any default policy.
+            </summary>
+            <example>
+            <code>
+            [DisableRateLimiting]
+            [HttpGet("health")]
+            public IActionResult HealthCheck() => Ok();
+            </code>
+            </example>
+        </member>
+        <member name="T:JG.RateLimiter.Middleware.RateLimitAttribute">
+            <summary>
+            Specifies the rate limiting policy to apply to a controller or action.
+            </summary>
+            <example>
+            <code>
+            [RateLimit("api")]
+            public IActionResult Get() => Ok();
+            </code>
+            </example>
+        </member>
+        <member name="P:JG.RateLimiter.Middleware.RateLimitAttribute.PolicyName">
+            <summary>
+            Gets the name of the rate limiting policy to apply.
+            Must match a policy registered in <see cref="M:JG.RateLimiter.RateLimitingOptions.AddPolicy(System.String,JG.RateLimiter.IRateLimiterPolicy)"/>.
+            </summary>
+        </member>
+        <member name="M:JG.RateLimiter.Middleware.RateLimitAttribute.#ctor(System.String)">
+            <summary>
+            Creates a new <see cref="T:JG.RateLimiter.Middleware.RateLimitAttribute"/> targeting the named policy.
+            </summary>
+            <param name="policyName">The name of the registered rate limiting policy.</param>
+            <exception cref="T:System.ArgumentNullException">Thrown when <paramref name="policyName"/> is <c>null</c>.</exception>
+        </member>
+        <member name="T:JG.RateLimiter.Middleware.RateLimitingMiddleware">
+            <summary>
+            ASP.NET Core middleware that enforces rate limiting policies on incoming requests.
+            </summary>
+        </member>
+        <member name="M:JG.RateLimiter.Middleware.RateLimitingMiddleware.CreateFactory(JG.RateLimiter.IRateLimiterPolicy)">
+            <summary>
+            Returns a factory delegate that captures the policy in a lightweight manner.
+            The TimeProvider is accessed from the field to avoid a second capture.
+            </summary>
+        </member>
+        <member name="T:JG.RateLimiter.Policies.ConcurrencyPolicy">
+            <summary>
+            Configures a concurrency limiting policy that caps simultaneous in-flight requests.
+            </summary>
+            <example>
+            <code>
+            new ConcurrencyPolicy
+            {
+                PermitLimit = 10,
+                PartitionBy = ctx => ctx.Connection.RemoteIpAddress?.ToString()
+            }
+            </code>
+            </example>
+        </member>
+        <member name="P:JG.RateLimiter.Policies.ConcurrencyPolicy.PermitLimit">
+            <summary>
+            Gets or sets the maximum number of concurrent permits. Must be at least 1.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.Policies.ConcurrencyPolicy.PartitionBy">
+            <summary>
+            Gets or sets the function that extracts a partition key from the request.
+            Defaults to the client's remote IP address.
+            </summary>
+        </member>
+        <member name="M:JG.RateLimiter.Policies.ConcurrencyPolicy.JG#RateLimiter#IRateLimiterPolicy#CreateLimiter(System.TimeProvider)">
+            <inheritdoc />
+        </member>
+        <member name="T:JG.RateLimiter.Policies.FixedWindowPolicy">
+            <summary>
+            Configures a fixed window rate limiting policy.
+            </summary>
+            <example>
+            <code>
+            new FixedWindowPolicy
+            {
+                PermitLimit = 1000,
+                Window = TimeSpan.FromHours(1),
+                PartitionBy = ctx => ctx.Request.Headers["X-Api-Key"].ToString()
+            }
+            </code>
+            </example>
+        </member>
+        <member name="P:JG.RateLimiter.Policies.FixedWindowPolicy.PermitLimit">
+            <summary>
+            Gets or sets the maximum number of permits allowed per window. Must be at least 1.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.Policies.FixedWindowPolicy.Window">
+            <summary>
+            Gets or sets the duration of each fixed time window.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.Policies.FixedWindowPolicy.PartitionBy">
+            <summary>
+            Gets or sets the function that extracts a partition key from the request.
+            Defaults to the client's remote IP address.
+            </summary>
+        </member>
+        <member name="M:JG.RateLimiter.Policies.FixedWindowPolicy.JG#RateLimiter#IRateLimiterPolicy#CreateLimiter(System.TimeProvider)">
+            <inheritdoc />
+        </member>
+        <member name="T:JG.RateLimiter.Policies.SlidingWindowPolicy">
+            <summary>
+            Configures a sliding window rate limiting policy.
+            </summary>
+            <example>
+            <code>
+            new SlidingWindowPolicy
+            {
+                PermitLimit = 100,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 6,
+                PartitionBy = ctx => ctx.Connection.RemoteIpAddress?.ToString()
+            }
+            </code>
+            </example>
+        </member>
+        <member name="P:JG.RateLimiter.Policies.SlidingWindowPolicy.PermitLimit">
+            <summary>
+            Gets or sets the maximum number of permits allowed within the rolling window.
+            Must be at least 1.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.Policies.SlidingWindowPolicy.Window">
+            <summary>
+            Gets or sets the total duration of the sliding window.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.Policies.SlidingWindowPolicy.SegmentsPerWindow">
+            <summary>
+            Gets or sets the number of segments the window is divided into.
+            Higher values give finer granularity. Must be at least 2. Defaults to 3.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.Policies.SlidingWindowPolicy.PartitionBy">
+            <summary>
+            Gets or sets the function that extracts a partition key from the request.
+            Defaults to the client's remote IP address.
+            </summary>
+        </member>
+        <member name="M:JG.RateLimiter.Policies.SlidingWindowPolicy.JG#RateLimiter#IRateLimiterPolicy#CreateLimiter(System.TimeProvider)">
+            <inheritdoc />
+        </member>
+        <member name="T:JG.RateLimiter.Policies.TokenBucketPolicy">
+            <summary>
+            Configures a token bucket rate limiting policy.
+            </summary>
+            <example>
+            <code>
+            new TokenBucketPolicy
+            {
+                PermitLimit = 100,
+                Window = TimeSpan.FromMinutes(1),
+                BurstLimit = 20,
+                PartitionBy = ctx => ctx.Connection.RemoteIpAddress?.ToString()
+            }
+            </code>
+            </example>
+        </member>
+        <member name="P:JG.RateLimiter.Policies.TokenBucketPolicy.PermitLimit">
+            <summary>
+            Gets or sets the number of permits replenished per <see cref="P:JG.RateLimiter.Policies.TokenBucketPolicy.Window"/>.
+            Must be at least 1.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.Policies.TokenBucketPolicy.Window">
+            <summary>
+            Gets or sets the time period over which <see cref="P:JG.RateLimiter.Policies.TokenBucketPolicy.PermitLimit"/> tokens are added.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.Policies.TokenBucketPolicy.BurstLimit">
+            <summary>
+            Gets or sets the maximum token capacity (burst size).
+            Requests beyond this are rejected even after a long idle period. Must be at least 1.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.Policies.TokenBucketPolicy.PartitionBy">
+            <summary>
+            Gets or sets the function that extracts a partition key from the request.
+            Defaults to the client's remote IP address.
+            </summary>
+        </member>
+        <member name="M:JG.RateLimiter.Policies.TokenBucketPolicy.JG#RateLimiter#IRateLimiterPolicy#CreateLimiter(System.TimeProvider)">
+            <inheritdoc />
+        </member>
+        <member name="T:JG.RateLimiter.RateLimitingOptions">
+            <summary>
+            Configuration for the rate limiting middleware. Holds registered policies
+            and controls rejection behavior.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.RateLimitingOptions.DefaultPolicyName">
+            <summary>
+            Gets or sets the name of the default policy applied to endpoints without a
+            <see cref="T:JG.RateLimiter.Middleware.RateLimitAttribute"/>. Endpoints decorated with
+            <see cref="T:JG.RateLimiter.Middleware.DisableRateLimitingAttribute"/> are always excluded.
+            If <c>null</c>, unattributed endpoints are not rate-limited.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.RateLimitingOptions.RejectionStatusCode">
+            <summary>
+            Gets or sets the HTTP status code returned when a request is rejected.
+            Defaults to <c>429</c> (Too Many Requests).
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.RateLimitingOptions.OnRejected">
+            <summary>
+            Gets or sets an optional callback invoked when a request is rejected.
+            Use this to customize the response body or headers. When set, the middleware
+            will not write a status code automatically — the callback is responsible for
+            setting the response.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.RateLimitingOptions.IdleTimeout">
+            <summary>
+            Gets or sets how long a rate limiter can sit idle before it is removed from the store.
+            Defaults to 10 minutes.
+            </summary>
+        </member>
+        <member name="M:JG.RateLimiter.RateLimitingOptions.AddPolicy(System.String,JG.RateLimiter.IRateLimiterPolicy)">
+            <summary>
+            Registers a rate limiting policy under the given name.
+            </summary>
+            <param name="policyName">A unique name for the policy. Used in <see cref="T:JG.RateLimiter.Middleware.RateLimitAttribute"/>.</param>
+            <param name="policy">The policy configuration.</param>
+            <returns>This <see cref="T:JG.RateLimiter.RateLimitingOptions"/> instance for chaining.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when <paramref name="policyName"/> or <paramref name="policy"/> is <c>null</c>.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when <paramref name="policyName"/> is empty or whitespace.</exception>
+        </member>
+        <member name="M:JG.RateLimiter.RateLimitingOptions.TryGetPolicy(System.String,JG.RateLimiter.IRateLimiterPolicy@)">
+            <summary>
+            Attempts to retrieve a registered policy by name.
+            </summary>
+        </member>
+        <member name="P:JG.RateLimiter.RateLimitingOptions.PolicyNames">
+            <summary>
+            Returns all registered policy names. Used internally for diagnostics.
+            </summary>
+        </member>
+        <member name="T:JG.RateLimiter.Storage.InMemoryRateLimitStore">
+            <summary>
+            An in-memory store for <see cref="T:JG.RateLimiter.IRateLimiter"/> instances keyed by policy and partition.
+            Periodically removes idle entries to prevent unbounded memory growth.
+            </summary>
+            <remarks>
+            Thread-safe. Suitable for single-instance deployments. For distributed scenarios,
+            use a Redis-backed store.
+            </remarks>
+        </member>
+        <member name="M:JG.RateLimiter.Storage.InMemoryRateLimitStore.GetOrCreate(System.String,System.String,System.Func{JG.RateLimiter.IRateLimiter})">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Storage.InMemoryRateLimitStore.TryRemove(System.String,System.String)">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Storage.InMemoryRateLimitStore.Clear">
+            <inheritdoc />
+        </member>
+        <member name="M:JG.RateLimiter.Storage.InMemoryRateLimitStore.Dispose">
+            <inheritdoc />
+        </member>
+    </members>
+</doc>

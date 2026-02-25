@@ -7,7 +7,7 @@
 
 ---
 
-High-performance rate limiting for .NET APIs. Supports token bucket, sliding window, fixed window, and concurrency limiting — with per-client and per-endpoint policies, distributed state via Redis, and ASP.NET Core middleware integration.
+High-performance rate limiting for .NET APIs. Supports token bucket, sliding window, fixed window, and concurrency limiting — with per-client and per-endpoint policies, pluggable storage for distributed state, and ASP.NET Core middleware integration.
 
 
 ## Features
@@ -17,8 +17,8 @@ High-performance rate limiting for .NET APIs. Supports token bucket, sliding win
 - **Fixed Window** — Simple time-sliced rate limiting with automatic reset
 - **Concurrency Limiter** — Cap simultaneous in-flight requests per client or endpoint
 - **Per-Client Policies** — Rate limit by IP, API key, user ID, or custom partition key
-- **Per-Endpoint Policies** — Different limits for different routes via attributes or conventions
-- **Distributed State** — Optional Redis backend for rate limiting across multiple instances
+- **Per-Endpoint Policies** — Different limits for different routes via `[RateLimit]` / `[DisableRateLimiting]`
+- **Extensible Storage** — In-memory by default; implement `IRateLimitStore` for Redis or other backends
 - **Retry-After Headers** — Automatic `Retry-After` and `X-RateLimit-*` response headers
 - **Middleware** — Drop-in ASP.NET Core middleware with `services.AddRateLimiting()`
 
@@ -31,6 +31,9 @@ dotnet add package JG.RateLimiter
 ## Quick Start
 
 ```csharp
+using JG.RateLimiter;
+using JG.RateLimiter.Policies;
+
 builder.Services.AddRateLimiting(options =>
 {
     options.AddPolicy("api", new TokenBucketPolicy
@@ -42,7 +45,9 @@ builder.Services.AddRateLimiting(options =>
     });
 });
 
+app.UseRouting();
 app.UseRateLimiting();
+app.MapControllers();
 ```
 
 ## Documentation
